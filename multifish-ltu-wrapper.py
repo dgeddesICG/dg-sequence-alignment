@@ -32,21 +32,21 @@ LTUParamterDict = { 'resampledSequences' : [],
                     'shifts' : []}
 
 # the nested dict / oracle containing the LTU parameters for multiple fish. There will always be an entry with key "0"
-multifishOracle = {'0' : dict(LTUParamterDict)}
+multifishOracle = {0 : dict(LTUParamterDict)}
 
 # helper functions that are not called by the LTU App
 def isFishProfileInOracle(fishIndex):
-    return (str(fishIndex) in multifishOracle.keys())
+    return (fishIndex in multifishOracle.keys())
 
 def addFishToOracle(fishIndex):
     if (isFishProfileInOracle(fishIndex) == False):
-        multifishOracle[str(fishIndex)] = dict(LTUParamterDict)
+        multifishOracle[fishIndex] = dict(LTUParamterDict)
 
 def removeFishFromOracle(fishIndex):
     # removing a fish from the oracle removes the entry at that key but also decrements the key number by one to match the behaviour of the spimGUI obj C side
     # im mostly just going to copy the logic of the SpimApplication.removeFish method
     returnFlag = 1
-    fishIndices = sorted(int(keys) for keys in multifishOracle.keys())
+    fishIndices = sorted(keys for keys in multifishOracle.keys())
     maxFishIndex = max(fishIndices)
     numFishInOracle = len(fishIndices)
     if (isFishProfileInOracle(fishIndex) == False):
@@ -60,29 +60,26 @@ def removeFishFromOracle(fishIndex):
         returnFlag = 0
     elif (fishIndex == maxFishIndex):
         # if its the final entry we want to remove just delete it
-        del multifishOracle[str(fishIndex)]
+        del multifishOracle[fishIndex]
     else:
-        # shuffle all the entry down by updating each entry with the LTU parameters from the entry above and deleting the final entry
+        # shuffle all the entries down by updating each entry with the LTU parameters from the entry above and deleting the final entry
         # again we're relying on nothing fishy happening and that there are continuous indices from fishIndex to maxIndex
         for k in range(fishIndex, maxFishIndex,1):
             updateLTUParameters(k,*getLTUParamters(k+1))
         # delete final entry because there is no successor to update LTUparameters from.
-        del multifishOracle[str(maxFishIndex)]
+        del multifishOracle[maxFishIndex]
     # return if deletion was successful
     return returnFlag
 
 
-
-
 def updateLTUParameters(resampledSequences, periodHistory, driftHistory,  shifts, fishIndex = 0):
     if(isFishProfileInOracle(fishIndex) == True):
-        fishIndexStr = str(fishIndex)
         parameterDict = {   'resampledSequences' : resampledSequences,
                             'periodHistory' : periodHistory,
                             'driftHistory' : driftHistory,
                             'shifts' : shifts
                          }
-        multifishOracle[fishIndexStr] = parameterDict
+        multifishOracle[fishIndex] = parameterDict
     else:
         print(f'Fish Index {fishIndex} is not in oracle. Will add new entry and update parameters')
         addFishToOracle(fishIndex)
@@ -90,8 +87,7 @@ def updateLTUParameters(resampledSequences, periodHistory, driftHistory,  shifts
 
 def getLTUParamters(fishIndex):
     if (isFishProfileInOracle(fishIndex) == True):
-        fishIndexStr = str(fishIndex)
-        ltuTuple = (multifishOracle[fishIndexStr][keys] for keys in ['resampledSequences', 'periodHistory','driftHistory', 'shifts'])
+        ltuTuple = (multifishOracle[fishIndex][keys] for keys in ['resampledSequences', 'periodHistory','driftHistory', 'shifts'])
     else:
         print(f'Fish Index {fishIndex} is not in oracle. Will add new entry and return requested parameters')
         addFishToOracle(fishIndex)
@@ -132,8 +128,8 @@ def RoIForReferenceHistory(fishIndex = 0):
     # The tuple (-1,-1) is returned if the length of resampledSequences we pass in is zero.
     # If the fish index doesn't exist then I think we should still create an entry in the oracle then recall the function.
     # This will still return (-1,-1) back to the obj C side BUT we wont crash by reading a non existent entry in the oracle.
-    ltuTuple = getLTUParamters(fishIndex)
-    roi = mcc.RoIForReferenceHistory(ltuTuple[0])
+    ltuParameters = getLTUParamters(fishIndex)
+    roi = mcc.RoIForReferenceHistory(ltuParameters[0])
     return roi
 
 
@@ -144,7 +140,7 @@ def RoIForReferenceHistory(fishIndex = 0):
 These are additional functions that either needed to be implemented for multifish imaging (resetMultifishOracle, and clearMultifishOracle)
 The other two functions, numRefFrameSetsInHistory and resetRefFrameHistory, were previously methods belonging to PythonService.
 But since resampledSequences, periodHistory, driftHistory, and shifts are now only tracked on the python side then resampledSequences doesn't exist in the Obj C.
-So these functions are implemented here and are called by the Obj C side.
+So these functions are implemented here and are called by the Obj C side. The Obj C side requires each function return something so I return 1. 
 '''
 
 def numRefFrameSetsInHistory(fishIndex = 0):
@@ -160,12 +156,12 @@ def resetRefFrameHistory(fishIndex = 0):
 def resetMultifishOracle():
     # set parameters for each entry in the oracle to an empty list but NOT delete them
     for keys in multifishOracle.keys():
-        resetRefFrameHistory(int(keys))
-    return 0
+        resetRefFrameHistory(keys)
+    return 1
 
 def clearMultifishOracle():
     # delete every entry in the oracle EXCPEPT the "0" entry. 
     # The parameters for this entry are just reset to empty lists.
     for keys in multifishOracle.keys():
-        removeFishFromOracle(int(keys))
-    return -1
+        removeFishFromOracle(keys)
+    return 1
